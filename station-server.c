@@ -4,21 +4,104 @@
 #include <unistd.h>
 #include <errno.h> 
 #include <string.h>
+#include <stdbool.h> 
 
+#include <sys/time.h> 
 #include <sys/types.h>
 #include <sys/socket.h> 
 #include <netdb.h> 
 
 
 
+#define MAX_ROUTES      500
+#define MAX_CHAR        500
+#define MAX_FILEPATH    500
+
+
+struct timetable_routes {                                                    
+    char departure_time[MAX_CHAR];  
+    char route_name[MAX_CHAR];
+    char departing_from[MAX_CHAR];
+    char arrival_time[MAX_CHAR];
+    char arrival_station[MAX_CHAR];
+
+} routenumber[MAX_ROUTES]; 
+
+struct timetable_routes mystation_routes[MAX_ROUTES];
+
+    
+
+int readtt_file(char* station){ 
+
+    char file_path[MAX_FILEPATH];
+    strcpy(file_path, "tt-");
+    strcat(file_path, station);
+
+
+    FILE *file = fopen(file_path, "r");
+    if (file == NULL) {
+        fprintf(stderr, "Error opening file.\n");
+        exit(EXIT_FAILURE);
+    }
+    
+
+    char line[MAX_CHAR];
+    int route_index = 0;
+
+    // Skipping first line
+    fgets(line, sizeof(line), file);
+    fgets(line, sizeof(line), file);
+
+    
+    while (fgets(line, sizeof(line), file) != NULL) {
+        if (line[0] != '#') {
+            char *token;
+            token = strtok(line, ",");
+            strcpy(mystation_routes[route_index].departure_time, token);
+            token = strtok(NULL, ",");
+            strcpy(mystation_routes[route_index].route_name, token);
+            token = strtok(NULL, ",");
+            strcpy(mystation_routes[route_index].departing_from, token);
+            token = strtok(NULL, ",");
+            strcpy(mystation_routes[route_index].arrival_time, token);
+            token = strtok(NULL, ",");
+            strcpy(mystation_routes[route_index].arrival_station, token);
+            route_index++;
+        }
+    }
+
+    
+    fclose(file);
+
+
+    return route_index; 
+}
+
+
+
+
+    
+
+
 
 int main(int argc, char* argv[]) {
 
-    fprintf(stdout, "%s and %i\n", argv[1], argc); 
-    if (argc != 4){
-        fprintf(stderr, "Incorrect usage. Usage: ./station-server [tcp_port] [myUDP_port] [station2_UDP_port]\n"); 
+    if (argc != 5){
+        fprintf(stderr, "Incorrect usage. Usage: ./station-server [station_name] [tcp_port] [myUDP_port] [station2_UDP_port]\n"); 
         exit(EXIT_FAILURE); 
     }
+
+
+    /* read tt file */
+
+
+
+    int num_of_routes = readtt_file(argv[1]); 
+    
+
+
+
+
 
     /* getaddrinfo */
 
@@ -31,11 +114,11 @@ int main(int argc, char* argv[]) {
     hints.ai_socktype = SOCK_STREAM;                            // specify TCP/IP    
     hints.ai_flags = AI_PASSIVE;                                // set local host address 
 
-    char *portnum = argv[1]; 
+    char *portnum = argv[3]; 
 
     int status = getaddrinfo(NULL, portnum, &hints, &results); 
     if (status != 0){ 
-        fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status)); 
+        fprintf(stderr, "getaddrinfo1 error: %s\n", gai_strerror(status)); 
         exit(EXIT_FAILURE); 
     }
 
@@ -47,6 +130,10 @@ int main(int argc, char* argv[]) {
         perror("socket() error: "); 
         return(EXIT_FAILURE); 
     }
+            
+    int yes=1;        // For setsockopt() SO_REUSEADDR, below
+    // Lose the pesky "address already in use" error message
+    setsockopt(TCPsocket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
 
     printf("socket %d opened\n", TCPsocket);
 
@@ -69,100 +156,24 @@ int main(int argc, char* argv[]) {
     }
 
 
-    /* accept */
-
-
-
-    struct sockaddr_storage their_addr; 
-    socklen_t addr_size = sizeof their_addr; 
-
-    int connectedSocket = accept(TCPsocket, (struct sockaddr *)&their_addr, &addr_size); 
-    if (connectedSocket == -1){ 
-        perror("accept() error: "); 
-        exit(EXIT_FAILURE);  
-    }
-
-
-    /* receive */ 
-    
-    int receivelen = 2000; 
-    char buf[receivelen]; 
-    int bytes_received = recv(connectedSocket, &buf, receivelen, 0); 
-    if (bytes_received == -1){ 
-        perror("recv() error: "); 
-        exit(EXIT_FAILURE); 
-    }
-    printf("%i, message: %s\n", bytes_received, buf); 
-
-
-    /* send */
-
-    char *msg = "HTTP/1.1 200 OK\r\n"
-                "Content-Type: text/html\r\n"
-                "Connection: Closed\r\n"
-                "\r\n" 
-                "<!DOCTYPE html>\r\n"
-                "<html>\r\n"
-                "<head>\r\n"
-                "<style>\r\n"
-                "body {\r\n"
-                "    font-family: Arial, sans-serif;\r\n"
-                "    background-color: #f0f0f0;\r\n"
-                "}\r\n"
-                "h1 {\r\n"
-                "    color: #333;\r\n"
-                "}\r\n"
-                ".container {\r\n"
-                "    width: 80%;\r\n"
-                "    margin: 0 auto;\r\n"
-                "    background-color: #fff;\r\n"
-                "    padding: 20px;\r\n"
-                "    border-radius: 10px;\r\n"
-                "}\r\n"
-                "</style>\r\n"
-                "</head>\r\n"
-                "<body>\r\n"
-                "<div class=\"container\">\r\n"
-                "<h1> I built this shit, brick by brick. -Arush </h1>\r\n"
-//                "<p>This is a paragraph of text.</p>\r\n"
-//                "<p>You can add more content here.</p>\r\n"
-                "</div>\r\n"
-                "</body>\r\n"
-                "</html>\r\n";;
-    
-    int len, bytes_sent; 
-    len = strlen(msg); 
-    bytes_sent = send(connectedSocket, msg, len, 0); 
-    if (bytes_sent == -1){ 
-        perror("send() error: "); 
-        exit(EXIT_FAILURE); 
-    }
-
-
-
-    freeaddrinfo(results); 
-    status = shutdown(TCPsocket, 2);
-    if (status == -1){ 
-        perror("shutdown() error: "); 
-        exit(EXIT_FAILURE); 
-    }
-    status = close(TCPsocket); 
-    if (status == -1){ 
-        perror("close() error: "); 
-        exit(EXIT_FAILURE); 
-    }
-    
 
 
 
 
 
 
-    /* REGULAR UNCONNECTED DATAGRAM SOCKETS */ 
-
-    // requires using sendto() and recvfrom() 
 
 
+
+
+
+
+
+
+
+
+
+    /* UDP PORT SETUP */
 
     /* UDP GetAddrInfo */
 
@@ -175,7 +186,7 @@ int main(int argc, char* argv[]) {
     InputAddr.ai_socktype = SOCK_DGRAM; 
     InputAddr.ai_flags = AI_PASSIVE;     
 
-    char *port = argv[2]; 
+    char *port = argv[4]; 
 
     status = getaddrinfo(NULL, port, &InputAddr, &OutputAddr); 
     if ( status != 0){ 
@@ -192,6 +203,8 @@ int main(int argc, char* argv[]) {
         perror("socket() error: "); 
         return(EXIT_FAILURE); 
     }
+    
+
 
     printf("\n\n\n\n my own UDP socket %d opened\n", Mysocket);
 
@@ -205,57 +218,232 @@ int main(int argc, char* argv[]) {
     }
 
 
+    /* UDP Select() Setup*/
+
+    
+    fd_set currentUDP_fds; 
+    fd_set readyUDP_fds; 
+    int UDPfdmax = Mysocket + 1; 
+
+
+
+
+
+    /* SELECT() OR POLL()   */
+
+    fd_set current_sockets; 
+    fd_set ready_sockets; 
+    int fdmax = TCPsocket + 1; 
+
+    // initialise current set 
+    FD_ZERO(&current_sockets); 
+    FD_SET(TCPsocket, &current_sockets); 
+
+    // set timeout 
+    struct timeval timeout; 
+
+
+    while (true){                                           // might need to change to have dynamically adjusting array of sockets (Beej 7.3) 
         
+        ready_sockets = current_sockets; 
+        timeout.tv_sec = 15; 
+        timeout.tv_usec = 3000; 
 
-    switch(atoi(argv[2])){ 
-        case 2606: 
-            
-
-            /* Sending Datagram */
-
-            struct sockaddr_in destination_addr;                   // destination details required for sendto()
-            int destport = atoi(argv[3]); 
-
-            destination_addr.sin_family = AF_INET;
-            destination_addr.sin_port = htons(destport); 
-            destination_addr.sin_addr.s_addr = INADDR_ANY;         //can assign INADDR_ANY to bind to your local IP address (like the AI_PASSIVE flag)
+        status = select(fdmax, &ready_sockets, NULL, NULL, &timeout);         
 
 
+        printf("status is: %i\n", status); 
 
-            char *UDPmessage = "Hello, Station Server 2!";
-            int UDPmessagelen = strlen(UDPmessage);
-            int UDPbytes_sent = sendto(Mysocket, UDPmessage, UDPmessagelen, 0, (struct sockaddr *)&destination_addr, sizeof(destination_addr));
 
-            if (UDPbytes_sent == -1) {
-                perror("sendto");
+        if (status == -1){ 
+            perror("select() error: "); 
+            exit(EXIT_FAILURE); 
+        }
+        else if (status){                                                               // listen() heard a connection 
+
+
+            for (int i = 0; i <= fdmax; i++){ 
+
+                
+                if(FD_ISSET(i, &ready_sockets)){ 
+
+
+                        /* accept */
+
+                        struct sockaddr_storage their_addr; 
+                        socklen_t addr_size = sizeof their_addr; 
+
+                        int connectedSocket = accept(TCPsocket, (struct sockaddr *)&their_addr, &addr_size); 
+                        if (connectedSocket == -1){ 
+                            perror("accept() error: "); 
+                            exit(EXIT_FAILURE);  
+                        }
+
+
+                        /* receive */ 
+                        
+                        int receivelen = 2000; 
+                        char buf[receivelen]; 
+                        int bytes_received = recv(connectedSocket, &buf, receivelen, 0); 
+                        if (bytes_received == -1){ 
+                            perror("recv() error: "); 
+                            exit(EXIT_FAILURE); 
+                        }
+
+                        fprintf(stdout, "\n\n'''''''''''''''''''''''''''''''''''''''''''''''''''");
+                        fprintf(stdout, "Station %s: Request Received\n\n", argv[3]);  
+                        printf("%s\n\n\n\n", buf); 
+
+
+                        /* send */
+
+                        char *msg = "HTTP/1.1 200 OK\r\n"
+                                    "Content-Type: text/html\r\n"
+                                    "Connection: Closed \r\n"
+                                    "\r\n" 
+                                    "<!DOCTYPE html>\r\n"
+                                    "<html>\r\n"
+                                    "<head>\r\n"
+                                    "<style>\r\n"
+                                    "body {\r\n"
+                                    "    font-family: Arial, sans-serif;\r\n"
+                                    "    background-color: #f0f0f0;\r\n"
+                                    "}\r\n"
+                                    "h1 {\r\n"
+                                    "    color: #333;\r\n"
+                                    "}\r\n"
+                                    ".container {\r\n"
+                                    "    width: 80%;\r\n"
+                                    "    margin: 0 auto;\r\n"
+                                    "    background-color: #fff;\r\n"
+                                    "    padding: 20px;\r\n"
+                                    "    border-radius: 10px;\r\n"
+                                    "}\r\n"
+                                    "</style>\r\n"
+                                    "</head>\r\n"
+                                    "<body>\r\n"
+                                    "<div class=\"container\">\r\n"
+                                    "<h1> 2 + 2 = 'hello world!' </h1>\r\n"
+                        //            "<p>This is a paragraph of text.</p>\r\n"
+                        //            "<p>You can add more content here.</p>\r\n"
+                                    "</div>\r\n"
+                                    "</body>\r\n"
+                                    "</html>\r\n";;
+                        
+                        int len, bytes_sent; 
+                        len = strlen(msg); 
+                        bytes_sent = send(connectedSocket, msg, len, 0); 
+                        if (bytes_sent == -1){ 
+                            perror("send() error: "); 
+                            exit(EXIT_FAILURE); 
+                        }
+
+
+
+                        /* Sending Datagram */
+
+                        struct sockaddr_in destination_addr;                   // destination details required for sendto()
+                        int destport = atoi(argv[4]); 
+
+                        destination_addr.sin_family = AF_INET;
+                        destination_addr.sin_port = htons(destport); 
+                        destination_addr.sin_addr.s_addr = INADDR_ANY;         //can assign INADDR_ANY to bind to your local IP address (like the AI_PASSIVE flag)
+
+
+
+                        char *UDPmessage = "Hello, Station Server 2!";
+                        int UDPmessagelen = strlen(UDPmessage);
+                        int UDPbytes_sent = sendto(Mysocket, UDPmessage, UDPmessagelen, 0, (struct sockaddr *)&destination_addr, sizeof(destination_addr));
+
+                        if (UDPbytes_sent == -1) {
+                            perror("sendto");
+                        }
+
+                        fprintf(stdout, "Station%s: sent message to station%i\n", argv[3], destination_addr.sin_port); 
+                        fprintf(stdout, "%s\n", UDPmessage); 
+                        
+
+                        close(connectedSocket); 
+
+
+                    
+                }   
+
             }
+        }
+        else { 
+
+            fprintf(stdout, "\n\n\nSTATION%s: TCP SELECT() TIMED OUT\n\n\n", argv[3]); 
 
 
-            break; 
-        case 2608:
-            {
-            struct sockaddr_in incoming_addr; 
-            socklen_t incoming_addr_len = sizeof(struct sockaddr_in);
-            int BUFFER_SIZE = 1000; 
-            char incomingmessage[BUFFER_SIZE]; 
 
-            
-            int UDPbytes_received = recvfrom(Mysocket, incomingmessage, BUFFER_SIZE, 0, (struct sockaddr *)&incoming_addr, &incoming_addr_len); 
-            if (UDPbytes_received == -1){ 
-                perror("recfrom() error: "); 
-                close(Mysocket); 
+              /* UDP SELECT() CALL -> LISTENING FOR MSGS FROM OTHER STATIONS  */
+
+
+            // initialise current set 
+            FD_ZERO(&currentUDP_fds); 
+            FD_SET(Mysocket, &currentUDP_fds); 
+
+                
+            readyUDP_fds = currentUDP_fds; 
+            timeout.tv_sec = 15; 
+            timeout.tv_usec = 3000; 
+
+            status = select(UDPfdmax, &readyUDP_fds, NULL, NULL, &timeout);         
+
+            if (status == -1){ 
+                perror("status() error: "); 
                 exit(EXIT_FAILURE); 
             }
+            else if (status == 1){
+                            
+                        
+                struct sockaddr_in incoming_addr; 
+                socklen_t incoming_addr_len = sizeof(struct sockaddr_in);
+                int BUFFER_SIZE = 1000; 
+                char incomingmessage[BUFFER_SIZE]; 
 
-            printf("Message received from Station1 : %s\n", incomingmessage);
+                
+                int UDPbytes_received = recvfrom(Mysocket, incomingmessage, BUFFER_SIZE, 0, (struct sockaddr *)&incoming_addr, &incoming_addr_len); 
+                if (UDPbytes_received == -1){ 
+                    perror("recfrom() error: "); 
+                    close(Mysocket); 
+                    exit(EXIT_FAILURE); 
+                }
+
+                printf("\n\nStation %s: Message received from Station %i : %s\n\n", argv[3], incoming_addr.sin_port, incomingmessage);
+            }
+            else {
+
+                fprintf(stdout, "\n\nSTATION%s: UDP SELECT() TIMED OUT\n\n", argv[3]); 
 
             }
-            break; 
-        default:
-            fprintf(stderr, "not sure which input given \n"); 
-            exit(EXIT_FAILURE); 
             
+                     
+            
+            
+        }
+
+
+
     }
+
+
+
+    freeaddrinfo(results); 
+    status = shutdown(TCPsocket, 2);
+    if (status == -1){ 
+        perror("shutdown() error: "); 
+        exit(EXIT_FAILURE); 
+    }
+    status = close(TCPsocket); 
+    if (status == -1){ 
+        perror("close() error: "); 
+        exit(EXIT_FAILURE); 
+    }
+
+
+
 
         
     freeaddrinfo(OutputAddr); 
