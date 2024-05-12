@@ -13,10 +13,10 @@
 
 
 
-#define MAX_ROUTES      500
-#define MAX_CHAR        500
-#define MAX_FILEPATH    500
-
+#define MAX_ROUTES                  500
+#define MAX_CHAR                    500
+#define MAX_FILEPATH                500
+#define MAX_SINGLE_FILE_LINE        1000
 
 struct timetable_routes {                                                    
     char departure_time[MAX_CHAR];  
@@ -34,8 +34,8 @@ struct timetable_routes mystation_routes[MAX_ROUTES];
 int readtt_file(char* station){ 
 
     char file_path[MAX_FILEPATH];
-    strcpy(file_path, "tt-");
-    strcat(file_path, station);
+    sprintf(file_path, "tt-%s", station);
+    
 
 
     FILE *file = fopen(file_path, "r");
@@ -45,32 +45,37 @@ int readtt_file(char* station){
     }
     
 
-    char line[MAX_CHAR];
+    char line[MAX_SINGLE_FILE_LINE];
     int route_index = 0;
 
-    // Skipping first line
-    fgets(line, sizeof(line), file);
-    fgets(line, sizeof(line), file);
-
+    // Skipping first two lines
+    fgets(line, sizeof(line), file);   // skipping "# station-name,longitude,latitude"
+    fgets(line, sizeof(line), file);   // 
     
     while (fgets(line, sizeof(line), file) != NULL) {
         if (line[0] != '#') {
-            char *token;
-            token = strtok(line, ",");
-            strcpy(mystation_routes[route_index].departure_time, token);
-            token = strtok(NULL, ",");
-            strcpy(mystation_routes[route_index].route_name, token);
-            token = strtok(NULL, ",");
-            strcpy(mystation_routes[route_index].departing_from, token);
-            token = strtok(NULL, ",");
-            strcpy(mystation_routes[route_index].arrival_time, token);
-            token = strtok(NULL, ",");
-            strcpy(mystation_routes[route_index].arrival_station, token);
-            route_index++;
+            struct timetable_routes route;
+            if (sscanf(line, "%[^,],%[^,],%[^,],%[^,],%s",
+                       route.departure_time,
+                       route.route_name,
+                       route.departing_from,
+                       route.arrival_time,
+                       route.arrival_station) == 5) {
+                memcpy(&mystation_routes[route_index], &route, sizeof(struct timetable_routes));
+                route_index++;
+            } else {
+                fprintf(stderr, "Error parsing line: %s\n", line);
+            }
         }
     }
 
-    
+    for (int i = 0; i < route_index; i++) {
+    printf("Departure Time: %s, Route Name: %s, Departing From: %s, Arrival Time: %s, Arrival Station: %s\n",
+            mystation_routes[i].departure_time, mystation_routes[i].route_name,
+            mystation_routes[i].departing_from, mystation_routes[i].arrival_time,
+            mystation_routes[i].arrival_station);
+    }
+
     fclose(file);
 
 
@@ -114,7 +119,7 @@ int main(int argc, char* argv[]) {
     hints.ai_socktype = SOCK_STREAM;                            // specify TCP/IP    
     hints.ai_flags = AI_PASSIVE;                                // set local host address 
 
-    char *portnum = argv[3]; 
+    char *portnum = argv[2]; 
 
     int status = getaddrinfo(NULL, portnum, &hints, &results); 
     if (status != 0){ 
@@ -161,18 +166,6 @@ int main(int argc, char* argv[]) {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
     /* UDP PORT SETUP */
 
     /* UDP GetAddrInfo */
@@ -186,7 +179,7 @@ int main(int argc, char* argv[]) {
     InputAddr.ai_socktype = SOCK_DGRAM; 
     InputAddr.ai_flags = AI_PASSIVE;     
 
-    char *port = argv[4]; 
+    char *port = argv[3]; 
 
     status = getaddrinfo(NULL, port, &InputAddr, &OutputAddr); 
     if ( status != 0){ 
@@ -292,7 +285,19 @@ int main(int argc, char* argv[]) {
 
                         fprintf(stdout, "\n\n'''''''''''''''''''''''''''''''''''''''''''''''''''");
                         fprintf(stdout, "Station %s: Request Received\n\n", argv[3]);  
-                        printf("%s\n\n\n\n", buf); 
+
+                        /* PARSE REQUEST */
+
+                        char valid_request_prefix[] = "GET /?to"; ; 
+                        
+                        if (strncmp(buf, valid_request_prefix, strlen(valid_request_prefix)) == 0){ 
+                            
+                            printf("\nprefix's match\n"); 
+
+
+                        }
+
+
 
 
                         /* send */
@@ -351,7 +356,7 @@ int main(int argc, char* argv[]) {
 
 
 
-                        char *UDPmessage = "Hello, Station Server 2!";
+                        char *UDPmessage = "Hello, Station Server Neighbour!";
                         int UDPmessagelen = strlen(UDPmessage);
                         int UDPbytes_sent = sendto(Mysocket, UDPmessage, UDPmessagelen, 0, (struct sockaddr *)&destination_addr, sizeof(destination_addr));
 
