@@ -17,17 +17,33 @@
 #define MAX_CHAR                    500
 #define MAX_FILEPATH                500
 #define MAX_SINGLE_FILE_LINE        1000
+#define MAX_STATION_NAME            60
+#define URL_HEADER_TIME_LEN         7
+
+
 
 struct timetable_routes {                                                    
-    char departure_time[MAX_CHAR];  
+    int departure_time;  
     char route_name[MAX_CHAR];
     char departing_from[MAX_CHAR];
-    char arrival_time[MAX_CHAR];
+    int arrival_time;
     char arrival_station[MAX_CHAR];
 
 } routenumber[MAX_ROUTES]; 
 
 struct timetable_routes mystation_routes[MAX_ROUTES];
+
+
+
+
+
+
+
+
+
+
+
+
 
     
 
@@ -55,12 +71,16 @@ int readtt_file(char* station){
     while (fgets(line, sizeof(line), file) != NULL) {
         if (line[0] != '#') {
             struct timetable_routes route;
-            if (sscanf(line, "%[^,],%[^,],%[^,],%[^,],%s",
-                       route.departure_time,
+            int dep1, dep2, arr1, arr2; 
+            if (sscanf(line, "%i:%i,%[^,],%[^,],%i:%i,%s",
+                       &dep1, &dep2,
                        route.route_name,
                        route.departing_from,
-                       route.arrival_time,
-                       route.arrival_station) == 5) {
+                       &arr1, &arr2,
+                       route.arrival_station) == 7) {
+
+                route.departure_time = (dep1 * 100) + dep2; 
+                route.arrival_time = (arr1 * 100) + arr2; 
                 memcpy(&mystation_routes[route_index], &route, sizeof(struct timetable_routes));
                 route_index++;
             } else {
@@ -70,7 +90,7 @@ int readtt_file(char* station){
     }
 
     for (int i = 0; i < route_index; i++) {
-    printf("Departure Time: %s, Route Name: %s, Departing From: %s, Arrival Time: %s, Arrival Station: %s\n",
+    printf("Departure Time: %i, Route Name: %s, Departing From: %s, Arrival Time: %i, Arrival Station: %s\n",
             mystation_routes[i].departure_time, mystation_routes[i].route_name,
             mystation_routes[i].departing_from, mystation_routes[i].arrival_time,
             mystation_routes[i].arrival_station);
@@ -85,7 +105,110 @@ int readtt_file(char* station){
 
 
 
+
+
+
+
+
+
+
+
+
+int extract_depart_time(char* message_received, char* depart_time) {
+    // Find the position of '=' and '&'
     
+    char *url_time = strstr(message_received, "leave=");
+
+/*     
+    if (url_time == NULL) {
+        printf("'leave=' not found in the string.\n");
+        return 1;
+    }
+
+*/
+
+    // Calculate the length of the substring
+    url_time += strlen("leave=");
+
+    // Copy the substring from str
+    strncpy(depart_time, url_time, URL_HEADER_TIME_LEN);
+    depart_time[URL_HEADER_TIME_LEN] = '\0'; // Null-terminate the string
+
+    char string_time[5]; 
+    int offset = 0; 
+
+    for (int i = 0; i < URL_HEADER_TIME_LEN; i++){ 
+        if (i == 2 || i == 3 || i == 4 ){ 
+            offset++;
+            continue; 
+        }
+        string_time[i-offset] = url_time[i]; 
+    }
+    string_time[5] = '\0'; 
+    int time = atoi(string_time); 
+
+    return time; 
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void extract_destination_station(char* message_received, char* destination_station) {
+    // Find the position of '=' and '&'
+    
+    char* equal_sign = strchr(message_received, '=');
+    char* ampersand_sign = strchr(equal_sign, '&');
+
+/*     
+    if (equal_sign == NULL) {
+        printf("No '=' sign found.\n");
+        return NULL;
+    }
+    if (ampersand_sign == NULL) {
+        printf("No '&' sign found after '='.\n");
+        return NULL;
+    }
+
+*/
+
+    
+    // Calculate the length of the substring
+    int substring_length = ampersand_sign - equal_sign - 1;
+
+    // Copy the substring from str
+    strncpy(destination_station, equal_sign + 1, substring_length);
+    destination_station[substring_length] = '\0'; // Null-terminate the string
+
+    return; 
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -282,9 +405,11 @@ int main(int argc, char* argv[]) {
                             perror("recv() error: "); 
                             exit(EXIT_FAILURE); 
                         }
+                        buf[bytes_received] = '\0';                                                         // add null-byte to received message.
 
-                        fprintf(stdout, "\n\n'''''''''''''''''''''''''''''''''''''''''''''''''''");
-                        fprintf(stdout, "Station %s: Request Received\n\n", argv[3]);  
+                        fprintf(stdout, "''''''''''''''''''''''''''''''''''''''''''''''''''''\n");
+                        fprintf(stdout, "Station %s: Request Received\n", argv[3]);  
+
 
                         /* PARSE REQUEST */
 
@@ -292,7 +417,94 @@ int main(int argc, char* argv[]) {
                         
                         if (strncmp(buf, valid_request_prefix, strlen(valid_request_prefix)) == 0){ 
                             
-                            printf("\nprefix's match\n"); 
+                            printf(" Valid Request\n");
+
+                            char destination_station[MAX_STATION_NAME + 1]; 
+                            extract_destination_station(buf, destination_station); 
+
+                            printf("Destination:          %s\n", destination_station); 
+
+                            char depart_time_str[URL_HEADER_TIME_LEN]; 
+                            int depart_time = extract_depart_time(buf, depart_time_str); 
+                            printf("Departure time:       %i\n", depart_time); 
+
+
+                            int target_route = -1; 
+                            char return_message[MAX_CHAR]; 
+                            char *default_message = "there is journey from station-A to station-B leaving after time-T today\n"; 
+                            strcpy(return_message, default_message);
+
+                            for (int j = 0; j < num_of_routes; j++){ 
+
+                                if ((mystation_routes[j].departure_time >= depart_time) && (strcmp(mystation_routes[j].arrival_station, destination_station) == 0)){
+                                    // if (mystation_routes[j].arrival_station > )                                                      // account for arriving past midnight (invalid)
+                                    target_route = j; 
+                                    break; 
+                                }
+
+                            }
+                            if (target_route != -1){    
+                                
+                                char formatted_time1[10];
+                                char formatted_time2[10];
+                                sprintf(formatted_time1, "%02d:%02d", mystation_routes[target_route].departure_time / 100, mystation_routes[target_route].departure_time % 100);
+                                sprintf(formatted_time2, "%02d:%02d", mystation_routes[target_route].arrival_time / 100, mystation_routes[target_route].arrival_time % 100);
+                                fprintf(stdout, "catch %s from %s, at time %s, to arrive at %s at time %s\n",  
+                                mystation_routes[target_route].route_name, argv[1], formatted_time1, 
+                                mystation_routes[target_route].arrival_station, formatted_time2); 
+                            
+                            }
+
+
+
+
+
+
+
+
+
+                            /* SEND TCP CONNECTION WEBPAGE RESULT */
+
+                            char *msg = "HTTP/1.1 200 OK\r\n"
+                                        "Content-Type: text/html\r\n"
+                                        "Connection: Closed \r\n"
+                                        "\r\n" 
+                                        "<!DOCTYPE html>\r\n"
+                                        "<html>\r\n"
+                                        "<head>\r\n"
+                                        "<style>\r\n"
+                                        "body {\r\n"
+                                        "    font-family: Arial, sans-serif;\r\n"
+                                        "    background-color: #f0f0f0;\r\n"
+                                        "}\r\n"
+                                        "h1 {\r\n"
+                                        "    color: #333;\r\n"
+                                        "}\r\n"
+                                        ".container {\r\n"
+                                        "    width: 80%;\r\n"
+                                        "    margin: 0 auto;\r\n"
+                                        "    background-color: #fff;\r\n"
+                                        "    padding: 20px;\r\n"
+                                        "    border-radius: 10px;\r\n"
+                                        "}\r\n"
+                                        "</style>\r\n"
+                                        "</head>\r\n"
+                                        "<body>\r\n"
+                                        "<div class=\"container\">\r\n"
+                                        "<h1> 2 + 2 = 'hello world!' </h1>\r\n"
+                            //            "<p>This is a paragraph of text.</p>\r\n"
+                            //            "<p>You can add more content here.</p>\r\n"
+                                        "</div>\r\n"
+                                        "</body>\r\n"
+                                        "</html>\r\n";;
+                            
+                            int len, bytes_sent; 
+                            len = strlen(msg); 
+                            bytes_sent = send(connectedSocket, msg, len, 0); 
+                            if (bytes_sent == -1){ 
+                                perror("send() error: "); 
+                                exit(EXIT_FAILURE); 
+                            } 
 
 
                         }
@@ -300,48 +512,7 @@ int main(int argc, char* argv[]) {
 
 
 
-                        /* send */
 
-                        char *msg = "HTTP/1.1 200 OK\r\n"
-                                    "Content-Type: text/html\r\n"
-                                    "Connection: Closed \r\n"
-                                    "\r\n" 
-                                    "<!DOCTYPE html>\r\n"
-                                    "<html>\r\n"
-                                    "<head>\r\n"
-                                    "<style>\r\n"
-                                    "body {\r\n"
-                                    "    font-family: Arial, sans-serif;\r\n"
-                                    "    background-color: #f0f0f0;\r\n"
-                                    "}\r\n"
-                                    "h1 {\r\n"
-                                    "    color: #333;\r\n"
-                                    "}\r\n"
-                                    ".container {\r\n"
-                                    "    width: 80%;\r\n"
-                                    "    margin: 0 auto;\r\n"
-                                    "    background-color: #fff;\r\n"
-                                    "    padding: 20px;\r\n"
-                                    "    border-radius: 10px;\r\n"
-                                    "}\r\n"
-                                    "</style>\r\n"
-                                    "</head>\r\n"
-                                    "<body>\r\n"
-                                    "<div class=\"container\">\r\n"
-                                    "<h1> 2 + 2 = 'hello world!' </h1>\r\n"
-                        //            "<p>This is a paragraph of text.</p>\r\n"
-                        //            "<p>You can add more content here.</p>\r\n"
-                                    "</div>\r\n"
-                                    "</body>\r\n"
-                                    "</html>\r\n";;
-                        
-                        int len, bytes_sent; 
-                        len = strlen(msg); 
-                        bytes_sent = send(connectedSocket, msg, len, 0); 
-                        if (bytes_sent == -1){ 
-                            perror("send() error: "); 
-                            exit(EXIT_FAILURE); 
-                        }
 
 
 

@@ -18,13 +18,13 @@ int main(int argc, char* argv[]){
         select(tcp_port)            //done
         if (1) 
             accept()                //done
-            parse_request() 
+            parse_request()         //done
             
 
             detect_file_change()
-            check_file()
-            if (1) 
-                return route
+            check_file()            //done
+            if (1)                  // done (needs tweaking) 
+                return route        // (almost) done
             else(
                 result = udp_broadcast_neighbors(destination, distance_to_neighbor)  
                 return result
