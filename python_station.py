@@ -4,7 +4,8 @@ import sys
 import logging
 import datetime
 
-from http_handling import parse_request, dispatch_request, handle_query, parse_path, create_response, parse_time_param, handle_udp_message
+from http_handling import parse_request, dispatch_request, handle_query, parse_path
+from udp_handling import handle_udp_message
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -85,14 +86,15 @@ def main():
                     print(f"Accepted new connection from {client_address}")
                 elif notified_socket == udp_socket:
                     print("UDP data detected...")
-                    data, address = udp_socket.recvfrom(1024)
+                    data, address = udp_socket.recvfrom(1024) # 1024 is the buffer size of what it's receiving
                     print(f"Received UDP message from {address}: {data.decode()}")
-                    handle_udp_message(data.decode(), routes, station_name, udp_socket, neighbors, ongoing_queries)
+                    handle_udp_message(data.decode(), routes, station_name, udp_socket, neighbors, ongoing_queries, sender_address=address)
                 else:
                     print("HTTP data detected...")
                     try:
                         message = notified_socket.recv(1024)
                         if not message:
+                            print(f"Connection closed by {notified_socket.getpeername()}")
                             sockets_list.remove(notified_socket)
                             notified_socket.close()
                             continue
@@ -119,13 +121,17 @@ def main():
                             sockets_list.remove(notified_socket)
 
             for notified_socket in exception_sockets:
+                print(f"Exception socket detected: {notified_socket}")
                 if notified_socket in sockets_list:
                     sockets_list.remove(notified_socket)
                 notified_socket.close()
 
+    except KeyboardInterrupt:
+        print("KeyboardInterrupt detected. Cleaning up and exiting...")
     finally:
         for sock in sockets_list:
             sock.close()
+        print("Sockets closed. Server shutting down.")
 
 if __name__ == '__main__':
     main()
