@@ -55,6 +55,23 @@ def find_routes(from_station, to_station, routes, current_time):
             results.append(route)
     return results
 
+def find_routes1(from_station, to_station, routes, current_time, arrival_time = None):
+    results = []
+    print("From station:", from_station)
+    print("To station:", to_station)
+    for route in routes:
+        departure_time_str = route['departure_time']
+        departure_time = datetime.datetime.strptime(departure_time_str, "%H:%M").time()
+        if route['departing_from'] == from_station and route['arrival_station'] == to_station:
+            if arrival_time:
+                if departure_time > arrival_time:
+                    results.append(route)
+            else:
+                if departure_time >= current_time:
+                    results.append(route)
+    return results
+
+
 def parse_request(request_text):
     """
     Parses an HTTP request text into its components and returns them.

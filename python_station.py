@@ -34,6 +34,7 @@ def read_timetable_file(station_name):
         print(f"Failed to read timetable file: {e}")
     return routes
 
+# Changes in main function
 def main():
     if len(sys.argv) < 5:
         print("Incorrect usage. Usage: python station_server.py [station_name] [tcp_port] [myUDP_port] [neighbor1:udp_port] ...")
@@ -47,8 +48,6 @@ def main():
 
     print(f"Starting server for {station_name} on TCP port {tcp_port} and UDP port {my_udp_port}")
     print(f"Neighbors: {neighbors}")
-
-    routes = read_timetable_file(station_name)
 
     tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tcp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -76,7 +75,7 @@ def main():
                         print(f"Removing socket with invalid file descriptor: {sock}")
                         sockets_list.remove(sock)
                 continue
-            
+
             print(f"Read sockets: {read_sockets}")
             for notified_socket in read_sockets:
                 if notified_socket == tcp_socket:
@@ -88,6 +87,8 @@ def main():
                     print("UDP data detected...")
                     data, address = udp_socket.recvfrom(1024) # 1024 is the buffer size of what it's receiving
                     print(f"Received UDP message from {address}: {data.decode()}")
+                    # Re-read the timetable file for the station
+                    routes = read_timetable_file(station_name)
                     handle_udp_message(data.decode(), routes, station_name, udp_socket, neighbors, ongoing_queries, sender_address=address)
                 else:
                     print("HTTP data detected...")
@@ -108,7 +109,9 @@ def main():
                         print(f"Parsed query parameters: {query_params}")
 
                         if 'to' in query_params:
-                            handle_query(body, query_params, routes, station_name, udp_socket, neighbors, ongoing_queries, notified_socket)
+                            routes = read_timetable_file(station_name)  # Re-read the timetable file for the station
+                            current_time = datetime.datetime.now().time()  # Use current system time as initial_time
+                            handle_query(body, query_params, station_name, udp_socket, neighbors, ongoing_queries, notified_socket, current_time)
                         else:
                             response = dispatch_request(method, path, body)
                             notified_socket.sendall(response.encode())
@@ -135,3 +138,8 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+
+
+

@@ -1,4 +1,4 @@
 # station-name,longitude,latitude
-TerminalC,116.0500,-31.8100
+TerminalD,115.8600,-31.7500
 # departure-time,route-name,departing-from,arrival-time,arrival-station
-07:30,busC_E,stopC,08:00,TerminalE
+09:00,busD_F,stopD,09:30,TerminalF
