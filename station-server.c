@@ -13,29 +13,48 @@
 
 
 
-#define MAX_ROUTES      500
-#define MAX_CHAR        500
-#define MAX_FILEPATH    500
+#define MAX_ROUTES                  500
+#define MAX_CHAR                    2000
+#define MAX_FILEPATH                500
+#define MAX_SINGLE_FILE_LINE        1000
+#define MAX_STATION_NAME            60
+#define URL_HEADER_TIME_LEN         7
+
 
 
 struct timetable_routes {                                                    
-    char departure_time[MAX_CHAR];  
+    int departure_time;  
     char route_name[MAX_CHAR];
     char departing_from[MAX_CHAR];
-    char arrival_time[MAX_CHAR];
+    int arrival_time;
     char arrival_station[MAX_CHAR];
 
 } routenumber[MAX_ROUTES]; 
 
 struct timetable_routes mystation_routes[MAX_ROUTES];
 
+
+typedef struct Neighbor {
+    char host[MAX_STATION_NAME];
+    int port;
+} Neighbor; 
+
+int num_neighbors; 
+
+
+
+
+
+
+
+
     
 
 int readtt_file(char* station){ 
 
     char file_path[MAX_FILEPATH];
-    strcpy(file_path, "tt-");
-    strcat(file_path, station);
+    snprintf(file_path, MAX_FILEPATH + 10, "tt-%s", station);
+    
 
 
     FILE *file = fopen(file_path, "r");
@@ -45,32 +64,40 @@ int readtt_file(char* station){
     }
     
 
-    char line[MAX_CHAR];
+    char line[MAX_SINGLE_FILE_LINE];
     int route_index = 0;
 
-    // Skipping first line
-    fgets(line, sizeof(line), file);
-    fgets(line, sizeof(line), file);
-
-    
+    // Skipping first two lines
+    fgets(line, sizeof(line), file);   // skipping "# station-name,longitude,latitude"
+    fgets(line, sizeof(line), file);   // 
+    printf("\n");
     while (fgets(line, sizeof(line), file) != NULL) {
         if (line[0] != '#') {
-            char *token;
-            token = strtok(line, ",");
-            strcpy(mystation_routes[route_index].departure_time, token);
-            token = strtok(NULL, ",");
-            strcpy(mystation_routes[route_index].route_name, token);
-            token = strtok(NULL, ",");
-            strcpy(mystation_routes[route_index].departing_from, token);
-            token = strtok(NULL, ",");
-            strcpy(mystation_routes[route_index].arrival_time, token);
-            token = strtok(NULL, ",");
-            strcpy(mystation_routes[route_index].arrival_station, token);
-            route_index++;
+            struct timetable_routes route;
+            int dep1, dep2, arr1, arr2; 
+            int x = sscanf(line, "%d:%d,%[^,],%[^,],%d:%d,%[^\n]",
+                       &dep1, &dep2,
+                       route.route_name,
+                       route.departing_from,
+                       &arr1, &arr2,
+                       route.arrival_station);
+            
+            if (x == 7) {
+                //route.arrival_station[strcspn(route.arrival_station, "\n")] = '\0';
+                route.departure_time = (dep1 * 100) + dep2; 
+                route.arrival_time = (arr1 * 100) + arr2; 
+                memcpy(&mystation_routes[route_index], &route, sizeof(struct timetable_routes));
+                route_index++;
+            } 
+            else {
+
+                fprintf(stderr, "Error parsing line: %s\n", line);
+            }
         }
     }
 
-    
+
+
     fclose(file);
 
 
@@ -80,16 +107,153 @@ int readtt_file(char* station){
 
 
 
+
+
+
+
+
+
+
+
+
+int extract_depart_time(char* message_received, char* depart_time) {
+    // Find the position of '=' and '&'
     
+    char *url_time = strstr(message_received, "leave=");
+
+/*     
+    if (url_time == NULL) {
+        printf("'leave=' not found in the string.\n");
+        return 1; (exit with 1 or something, as this function returns an integer)
+    }
+
+*/
+
+    // Calculate the length of the substring
+    url_time += strlen("leave=");
+
+    // Copy the substring from str
+    strncpy(depart_time, url_time, URL_HEADER_TIME_LEN);
+    depart_time[URL_HEADER_TIME_LEN] = '\0'; // Null-terminate the string
+
+    char string_time[5]; 
+    int offset = 0; 
+
+    for (int i = 0; i < URL_HEADER_TIME_LEN; i++){ 
+        if (i == 2 || i == 3 || i == 4 ){ 
+            offset++;
+            continue; 
+        }
+        string_time[i-offset] = url_time[i]; 
+    }
+    string_time[5] = '\0'; 
+    int time = atoi(string_time); 
+
+    return time; 
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void extract_destination_station(char* message_received, char* destination_station) {
+    // Find the position of '=' and '&'
+    
+    char* equal_sign = strchr(message_received, '=');
+    char* ampersand_sign = strchr(equal_sign, '&');
+
+/*     
+    if (equal_sign == NULL) {
+        printf("No '=' sign found.\n");
+        return NULL;
+    }
+    if (ampersand_sign == NULL) {
+        printf("No '&' sign found after '='.\n");
+        return NULL;
+    }
+
+*/
+
+    
+    // Calculate the length of the substring
+    int substring_length = ampersand_sign - equal_sign - 1;
+
+    // Copy the substring from str
+    strncpy(destination_station, equal_sign + 1, substring_length);
+    destination_station[substring_length] = '\0'; // Null-terminate the string
+
+    return; 
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
 int main(int argc, char* argv[]) {
 
-    if (argc != 5){
-        fprintf(stderr, "Incorrect usage. Usage: ./station-server [station_name] [tcp_port] [myUDP_port] [station2_UDP_port]\n"); 
+    if (argc < 5){
+        fprintf(stderr, "Incorrect usage. Usage: ./station-server [station_name] [tcp_port] [myUDP_port] [station2_host:station2_UDPport] ... \n"); 
         exit(EXIT_FAILURE); 
     }
+
+    Neighbor *neighbors = NULL;
+    int num_neighbors = argc - 4;
+
+    neighbors = malloc(num_neighbors * sizeof(Neighbor));
+    if (neighbors == NULL) {
+        fprintf(stderr, "Memory allocation failed.\n");
+        return 1;
+    }
+
+    // Parsing neighbor stations
+    for (int i = 0; i < num_neighbors; i++) {
+        char host[MAX_STATION_NAME];
+        int port;
+        sscanf(argv[i + 4], "%[^:]:%d", host, &port);
+
+        if (strlen(host) > 0 && port > 0) {
+            strcpy(neighbors[i].host, host);
+            neighbors[i].port = port;
+        } 
+        else {
+            fprintf(stderr, "\nInvalid neighbor format: %s\n", argv[i + 4]);
+            free(neighbors);
+            return 1;
+        }
+    }
+
+    // Printing neighbor stations
+    printf("\nNeighbor stations:\n");
+    for (int i = 0; i < num_neighbors; i++) {
+        printf("Host: %s, Port: %d\n", neighbors[i].host, neighbors[i].port);
+    }
+
+
 
 
     /* read tt file */
@@ -98,7 +262,7 @@ int main(int argc, char* argv[]) {
 
     int num_of_routes = readtt_file(argv[1]); 
     
-
+    
 
 
 
@@ -114,7 +278,7 @@ int main(int argc, char* argv[]) {
     hints.ai_socktype = SOCK_STREAM;                            // specify TCP/IP    
     hints.ai_flags = AI_PASSIVE;                                // set local host address 
 
-    char *portnum = argv[3]; 
+    char *portnum = argv[2]; 
 
     int status = getaddrinfo(NULL, portnum, &hints, &results); 
     if (status != 0){ 
@@ -134,8 +298,6 @@ int main(int argc, char* argv[]) {
     int yes=1;        // For setsockopt() SO_REUSEADDR, below
     // Lose the pesky "address already in use" error message
     setsockopt(TCPsocket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
-
-    printf("socket %d opened\n", TCPsocket);
 
 
     /* bind */
@@ -161,18 +323,6 @@ int main(int argc, char* argv[]) {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
     /* UDP PORT SETUP */
 
     /* UDP GetAddrInfo */
@@ -186,7 +336,7 @@ int main(int argc, char* argv[]) {
     InputAddr.ai_socktype = SOCK_DGRAM; 
     InputAddr.ai_flags = AI_PASSIVE;     
 
-    char *port = argv[4]; 
+    char *port = argv[3]; 
 
     status = getaddrinfo(NULL, port, &InputAddr, &OutputAddr); 
     if ( status != 0){ 
@@ -204,10 +354,6 @@ int main(int argc, char* argv[]) {
         return(EXIT_FAILURE); 
     }
     
-
-
-    printf("\n\n\n\n my own UDP socket %d opened\n", Mysocket);
-
 
     /* bind */
 
@@ -252,9 +398,6 @@ int main(int argc, char* argv[]) {
         status = select(fdmax, &ready_sockets, NULL, NULL, &timeout);         
 
 
-        printf("status is: %i\n", status); 
-
-
         if (status == -1){ 
             perror("select() error: "); 
             exit(EXIT_FAILURE); 
@@ -289,83 +432,150 @@ int main(int argc, char* argv[]) {
                             perror("recv() error: "); 
                             exit(EXIT_FAILURE); 
                         }
+                        buf[bytes_received] = '\0';                                                         // add null-byte to received message.
 
-                        fprintf(stdout, "\n\n'''''''''''''''''''''''''''''''''''''''''''''''''''");
-                        fprintf(stdout, "Station %s: Request Received\n\n", argv[3]);  
-                        printf("%s\n\n\n\n", buf); 
+                        fprintf(stdout, "''''''''''''''''''''''''''''''''''''''''''''''''''''\n");
+                        fprintf(stdout, "Station %s: Request Received\n", argv[3]);  
 
 
-                        /* send */
+                        /* PARSE REQUEST */
 
-                        char *msg = "HTTP/1.1 200 OK\r\n"
-                                    "Content-Type: text/html\r\n"
-                                    "Connection: Closed \r\n"
-                                    "\r\n" 
-                                    "<!DOCTYPE html>\r\n"
-                                    "<html>\r\n"
-                                    "<head>\r\n"
-                                    "<style>\r\n"
-                                    "body {\r\n"
-                                    "    font-family: Arial, sans-serif;\r\n"
-                                    "    background-color: #f0f0f0;\r\n"
-                                    "}\r\n"
-                                    "h1 {\r\n"
-                                    "    color: #333;\r\n"
-                                    "}\r\n"
-                                    ".container {\r\n"
-                                    "    width: 80%;\r\n"
-                                    "    margin: 0 auto;\r\n"
-                                    "    background-color: #fff;\r\n"
-                                    "    padding: 20px;\r\n"
-                                    "    border-radius: 10px;\r\n"
-                                    "}\r\n"
-                                    "</style>\r\n"
-                                    "</head>\r\n"
-                                    "<body>\r\n"
-                                    "<div class=\"container\">\r\n"
-                                    "<h1> 2 + 2 = 'hello world!' </h1>\r\n"
-                        //            "<p>This is a paragraph of text.</p>\r\n"
-                        //            "<p>You can add more content here.</p>\r\n"
-                                    "</div>\r\n"
-                                    "</body>\r\n"
-                                    "</html>\r\n";;
+                        char valid_request_prefix[] = "GET /?to"; ; 
                         
-                        int len, bytes_sent; 
-                        len = strlen(msg); 
-                        bytes_sent = send(connectedSocket, msg, len, 0); 
-                        if (bytes_sent == -1){ 
-                            perror("send() error: "); 
-                            exit(EXIT_FAILURE); 
+                        if (strncmp(buf, valid_request_prefix, strlen(valid_request_prefix)) == 0){ 
+                            
+                            printf("Valid Request\n");
+
+                            char destination_station[MAX_STATION_NAME + 1]; 
+                            extract_destination_station(buf, destination_station); 
+
+                            printf("Destination:          %s\n", destination_station); 
+
+                            char depart_time_str[URL_HEADER_TIME_LEN]; 
+                            int depart_time = extract_depart_time(buf, depart_time_str); 
+                            printf("Departure time:       %i\n", depart_time); 
+
+
+                            int target_route = -1; 
+                            char return_message[4500]; 
+
+
+                            for (int j = 0; j < num_of_routes; j++){ 
+                                if ((mystation_routes[j].departure_time >= depart_time) && (strcmp(mystation_routes[j].arrival_station, destination_station) == 0)){
+                                    // if (mystation_routes[j].arrival_station > )                                                      // account for arriving past midnight (invalid)
+                                    target_route = j; 
+                                    break; 
+                                }
+
+                            }
+
+                            if (target_route != -1){    
+                                
+                                char formatted_time1[10];
+                                char formatted_time2[10];
+                                snprintf(formatted_time1, URL_HEADER_TIME_LEN + 10,  "%02d:%02d", mystation_routes[target_route].departure_time / 100, mystation_routes[target_route].departure_time % 100);
+                                snprintf(formatted_time2, URL_HEADER_TIME_LEN + 10, "%02d:%02d", mystation_routes[target_route].arrival_time / 100, mystation_routes[target_route].arrival_time % 100);
+                                
+                                sprintf(return_message, "catch %s from %s, at time %s, to arrive at %s at time %s\n",  
+                                mystation_routes[target_route].route_name, argv[1], formatted_time1, 
+                                mystation_routes[target_route].arrival_station, formatted_time2); 
+
+                            }
+                            else{ 
+
+                                /* Sending Datagram to all other stations  */
+
+                                for (int y = 0; y < num_neighbors; y++){ 
+
+                                    struct sockaddr_in destination_addr;                   // destination details required for sendto()
+                                    int destport = neighbors[y].port; 
+
+                                    destination_addr.sin_family = AF_INET;
+                                    destination_addr.sin_port = htons(destport); 
+                                    struct hostent *host = gethostbyname(neighbors[y].host);
+                                    if (host == NULL) {
+                                        fprintf(stderr, "gethostbyname error: %s\n", hstrerror(h_errno));
+                                        continue; 
+                                    }
+
+                                    // Copy the resolved IP address to the sockaddr_in structure
+                                    memcpy(&destination_addr.sin_addr, host->h_addr, host->h_length);
+
+                                    char formatted_time1[10];
+                                    snprintf(formatted_time1, URL_HEADER_TIME_LEN + 10, "%02d:%02d", depart_time / 100, depart_time % 100);
+                                    char UDPmessage[200];
+
+                                    sprintf(UDPmessage, "QUERY %s %s %s", argv[1], destination_station, formatted_time1);
+                                    int UDPmessagelen = strlen(UDPmessage);
+                                    int UDPbytes_sent = sendto(Mysocket, UDPmessage, UDPmessagelen, 0, (struct sockaddr *)&destination_addr, sizeof(destination_addr));
+
+                                    if (UDPbytes_sent == -1) {
+                                        perror("sendto");
+                                    }
+
+                                    fprintf(stdout, "Station%s: sent message to station%i\n", argv[3], destport); 
+                                    printf("%s\n", UDPmessage);  
+                                    
+                                }
+
+                                strcpy(return_message, "there are no routes that fit those criteria\n"); 
+                            }
+
+
+
+
+
+
+                            /* SEND TCP CONNECTION WEBPAGE RESULT */
+
+                            
+                            char msg[15000]; 
+                            sprintf(msg, "HTTP/1.1 200 OK\r\n"
+                                        "Content-Type: text/html\r\n"
+                                        "Connection: Closed \r\n"
+                                        "\r\n" 
+                                        "<!DOCTYPE html>\r\n"
+                                        "<html>\r\n"
+                                        "<head>\r\n"
+                                        "<style>\r\n"
+                                        "body {\r\n"
+                                        "    font-family: Arial, sans-serif;\r\n"
+                                        "    background-color: #f0f0f0;\r\n"
+                                        "}\r\n"
+                                        "h1 {\r\n"
+                                        "    color: #333;\r\n"
+                                        "}\r\n"
+                                        ".container {\r\n"
+                                        "    width: 80%%;\r\n"
+                                        "    margin: 0 auto;\r\n"
+                                        "    background-color: #fff;\r\n"
+                                        "    padding: 20px;\r\n"
+                                        "    border-radius: 10px;\r\n"
+                                        "}\r\n"
+                                        "</style>\r\n"
+                                        "</head>\r\n"
+                                        "<body>\r\n"
+                                        "<div class=\"container\">\r\n"
+                                        "<h3> %s </h3>\r\n"                // Here we include the return_message
+                                        "</div>\r\n"
+                                        "</body>\r\n"
+                                        "</html>\r\n",
+                                        return_message); 
+                            
+                            int len, bytes_sent; 
+                            len = strlen(msg); 
+                            bytes_sent = send(connectedSocket, msg, len, 0); 
+                            if (bytes_sent == -1){ 
+                                perror("send() error: "); 
+                                exit(EXIT_FAILURE); 
+                            } 
+
+                            close(connectedSocket);
+
+                        }  
+                        else{ 
+                            printf("Invalid request\n"); 
                         }
-
-
-
-                        /* Sending Datagram */
-
-                        struct sockaddr_in destination_addr;                   // destination details required for sendto()
-                        int destport = atoi(argv[4]); 
-
-                        destination_addr.sin_family = AF_INET;
-                        destination_addr.sin_port = htons(destport); 
-                        destination_addr.sin_addr.s_addr = INADDR_ANY;         //can assign INADDR_ANY to bind to your local IP address (like the AI_PASSIVE flag)
-
-
-
-                        char *UDPmessage = "Hello, Station Server 2!";
-                        int UDPmessagelen = strlen(UDPmessage);
-                        int UDPbytes_sent = sendto(Mysocket, UDPmessage, UDPmessagelen, 0, (struct sockaddr *)&destination_addr, sizeof(destination_addr));
-
-                        if (UDPbytes_sent == -1) {
-                            perror("sendto");
-                        }
-
-                        fprintf(stdout, "Station%s: sent message to station%i\n", argv[3], destination_addr.sin_port); 
-                        fprintf(stdout, "%s\n", UDPmessage); 
-                        
-
-                        close(connectedSocket); 
-
-
                     
                 }   
 
@@ -373,7 +583,7 @@ int main(int argc, char* argv[]) {
         }
         else { 
 
-            fprintf(stdout, "\n\n\nSTATION%s: TCP SELECT() TIMED OUT\n\n\n", argv[3]); 
+            fprintf(stdout, "STATION%s: TCP SELECT() TIMED OUT\n", argv[3]); 
 
 
 
@@ -396,26 +606,104 @@ int main(int argc, char* argv[]) {
                 exit(EXIT_FAILURE); 
             }
             else if (status == 1){
-                            
+
+                while (FD_ISSET(Mysocket, &readyUDP_fds)) { 
                         
-                struct sockaddr_in incoming_addr; 
-                socklen_t incoming_addr_len = sizeof(struct sockaddr_in);
-                int BUFFER_SIZE = 1000; 
-                char incomingmessage[BUFFER_SIZE]; 
+                    struct sockaddr_in incoming_addr; 
+                    socklen_t incoming_addr_len = sizeof(struct sockaddr_in);
+                    int BUFFER_SIZE = 200; 
+                    char incomingmessage[BUFFER_SIZE]; 
 
-                
-                int UDPbytes_received = recvfrom(Mysocket, incomingmessage, BUFFER_SIZE, 0, (struct sockaddr *)&incoming_addr, &incoming_addr_len); 
-                if (UDPbytes_received == -1){ 
-                    perror("recfrom() error: "); 
-                    close(Mysocket); 
-                    exit(EXIT_FAILURE); 
+                    
+                    int UDPbytes_received = recvfrom(Mysocket, incomingmessage, BUFFER_SIZE, 0, (struct sockaddr *)&incoming_addr, &incoming_addr_len); 
+                    if (UDPbytes_received == -1){ 
+                        perror("recfrom() error: "); 
+                        close(Mysocket); 
+                        exit(EXIT_FAILURE); 
+                    }
+                    incomingmessage[UDPbytes_received] = '\0';
+                    printf("Station %s: Message received from Station %i : %s\n", argv[3], ntohs(incoming_addr.sin_port), incomingmessage);
+
+                    char source_station[MAX_STATION_NAME], destination[MAX_STATION_NAME];
+                    int departure_hour, departure_minute;
+
+                    // Use sscanf to parse the text
+                    if( sscanf(incomingmessage, "QUERY %s %s %d:%d", source_station, destination, &departure_hour, &departure_minute) != 4){ 
+                        fprintf(stdout, "could not successfuly scan QUERY. ignoring request.\n"); 
+                    }
+                    int departure_time2 = (departure_hour * 100) + departure_minute; 
+                    int target_route = -1; 
+                    char return_message[4500];
+
+                    
+
+                    for (int j = 0; j < num_of_routes; j++){ 
+                                if ((mystation_routes[j].departure_time >= departure_time2) && (strcmp(mystation_routes[j].arrival_station, destination) == 0)){
+                                    // if (mystation_routes[j].arrival_station > )                                                      // account for arriving past midnight (invalid)
+                                    target_route = j; 
+                                    break; 
+                                }
+
+                            }
+
+                    if (target_route != -1){    
+                        
+                        char formatted_time1[10];
+                        char formatted_time2[10];
+                        snprintf(formatted_time1, URL_HEADER_TIME_LEN + 10,  "%02d:%02d", mystation_routes[target_route].departure_time / 100, mystation_routes[target_route].departure_time % 100);
+                        snprintf(formatted_time2, URL_HEADER_TIME_LEN + 10, "%02d:%02d", mystation_routes[target_route].arrival_time / 100, mystation_routes[target_route].arrival_time % 100);
+                        
+                        sprintf(return_message, "catch %s from %s, at time %s, to arrive at %s at time %s\n",  
+                        mystation_routes[target_route].route_name, argv[1], formatted_time1, 
+                        mystation_routes[target_route].arrival_station, formatted_time2); 
+
+                    }
+                    else{ 
+                        strcpy(return_message, "there are no routes that fit those criteria\n"); 
+                    }
+
+                    struct sockaddr_in destination_addr;                   // destination details required for sendto()
+                    int index = -1; 
+                    for (int i = 0; i < num_neighbors; i++){ 
+                        if (strcmp(source_station, neighbors[i].host) == 0){ 
+                            index = i; 
+                            break; 
+                        }
+                    }
+                    
+                    if (index == -1){ 
+                        continue; 
+                    }
+
+                    int destport = neighbors[index].port; 
+
+                    destination_addr.sin_family = AF_INET;
+                    destination_addr.sin_port = htons(destport); 
+                    struct hostent *host = gethostbyname(neighbors[index].host);
+                    if (host == NULL) {
+                        fprintf(stderr, "gethostbyname error: %s\n", hstrerror(h_errno));
+                        continue; 
+                    }
+
+                    // Copy the resolved IP address to the sockaddr_in structure
+                    memcpy(&destination_addr.sin_addr, host->h_addr, host->h_length);
+
+                    int return_message_len = strlen(return_message);
+                    int UDPbytes_sent = sendto(Mysocket, return_message, return_message_len, 0, (struct sockaddr *)&destination_addr, sizeof(destination_addr));
+
+                    if (UDPbytes_sent == -1) {
+                        perror("sendto");
+                    }
+
+                    fprintf(stdout, "Station%s: sent message to station%i\n", argv[3], destport); 
+                    printf("%s\n", return_message);
+    
+
                 }
-
-                printf("\n\nStation %s: Message received from Station %i : %s\n\n", argv[3], incoming_addr.sin_port, incomingmessage);
             }
             else {
 
-                fprintf(stdout, "\n\nSTATION%s: UDP SELECT() TIMED OUT\n\n", argv[3]); 
+                fprintf(stdout, "STATION%s: UDP SELECT() TIMED OUT\n", argv[3]); 
 
             }
             
@@ -447,6 +735,7 @@ int main(int argc, char* argv[]) {
 
         
     freeaddrinfo(OutputAddr); 
+    //free(neighbors);
 
 
 
@@ -462,25 +751,4 @@ int main(int argc, char* argv[]) {
 
 
 
-/*
 
-GET /?to=Perth_Stn HTTP/1.1
-
-GET / HTTP/1.1
-Host: localhost:4444
-Connection: keep-alive
-sec-ch-ua: "Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"
-sec-ch-ua-mobile: ?0
-sec-ch-ua-platform: "Windows"
-Upgrade-Insecure-Requests: 1
-User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 */
-//  Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7
-/* 
-Sec-Fetch-Site: none
-Sec-Fetch-Mode: navigate
-Sec-Fetch-User: ?1
-Sec-Fetch-Dest: document
-Accept-Encoding: gzip, deflate, br, zstd
-Accept-Language: en-AU,en-GB;q=0.9,en-US;q=0.8,en;q=0.7
-
-*/
