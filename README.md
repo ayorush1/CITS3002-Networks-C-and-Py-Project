@@ -1,13 +1,9 @@
-PYTHON STATION. 
-Queries such as curl "http://localhost:8080/query?to=BusportE&time=20:00" return available routes client clan take after 20:00.
-curl "http://localhost:8080/query?to=BusportE" will input current time to do same.
+#PYTHON STATION. 
 
-UDP protocol implementation next.
-
-## Start a Station Server
+### Start a Station Server
 python3 python_station.py [station-name] [tcp-port] [udp-port] [neighbour1-ip]:[neighbour1-udp] [neighbour2... ]
 
-## Example: 
+### Example: 
 
 python3 python_station.py TerminalA 8080 5000 127.0.0.1:5001 127.0.0.1:5002
 python3 python_station.py TerminalB 8081 5001 127.0.0.1:5003
