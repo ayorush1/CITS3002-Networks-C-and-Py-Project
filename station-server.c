@@ -743,7 +743,7 @@ int main(int argc, char* argv[]) {
 
                 usleep(10000);   // WAIT FOR SENDER TO SEND ALL DATAGRAM BEFORE RESPONDING       // CHANGE?
 
-                int departure_time2 = (departure_hour * 100) + departure_minute; 
+                int departure_time2 = (departure_hour * 100) + departure_minute + 150; 
                 int target_route = -1; 
                 
 
@@ -754,7 +754,7 @@ int main(int argc, char* argv[]) {
                                 break; 
                             }
 
-                        }
+                }
 
                 if (target_route != -1){    
                     
@@ -829,7 +829,7 @@ int main(int argc, char* argv[]) {
                         struct timeval tv; 
                         int retval; 
                         
-                        // Set timeout period to 18 seconds
+                        // Set timeout period to 15 seconds
                         tv.tv_sec = 15;
                         tv.tv_usec = 0;
 
@@ -877,11 +877,14 @@ int main(int argc, char* argv[]) {
                                     char *station_name = by_position + strlen("by ");
 
 
+
+
+
                                     int intermediate_route = -1; 
                                     char intermediate_path[4500]; 
 
 
-                                    for (int k = 0; k < num_of_routes; k++){ 
+                                    for (int k = 0; k < num_of_routes; k++){
                                         if ((mystation_routes[k].departure_time >= departure_time2) && (strcmp(mystation_routes[k].arrival_station, station_name) == 0)){
                                             // if (mystation_routes[j].arrival_station > )                                                      // account for arriving past midnight (invalid)
                                             intermediate_route = k; 
@@ -948,7 +951,7 @@ int main(int argc, char* argv[]) {
             }
             else {
 
-                fprintf(stdout, "STATION%s: UDP SELECT() TIMED OUT\n", argv[3]); 
+                fprintf(stdout, "STATION%s: UDP SELECT() TIMED OUT\n", argv[3]);  
 
             }
             
@@ -980,8 +983,6 @@ int main(int argc, char* argv[]) {
 
         
     freeaddrinfo(OutputAddr); 
-    //free(neighbors);
-
 
 
 
