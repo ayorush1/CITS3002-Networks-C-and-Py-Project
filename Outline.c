@@ -18,15 +18,17 @@ int main(int argc, char* argv[]){
         select(tcp_port)            //done
         if (1) 
             accept()                //done
-            parse_request() 
+            parse_request()         //done
             
 
             detect_file_change()
-            check_file()
-            if (1) 
-                return route
+            check_file()            //done
+            if (1)                  // done (needs tweaking) 
+                return route        // done
             else(
-                result = udp_broadcast_neighbors(destination, distance_to_neighbor)  
+                udp_broadcast_neighbors(destination, distance_to_neighbor)  //done
+                wait_for_every_response()
+                result = fastest_path()
                 return result
             )
         
@@ -39,7 +41,7 @@ int main(int argc, char* argv[]){
                     detect_file_change()
                     check_file()
                     if (1) 
-                        return route 
+                        return route                                        // done
                     else( 
                         result = udp_broadcast_neightbors(destination) 
                         return result + distance_to_neighbor
