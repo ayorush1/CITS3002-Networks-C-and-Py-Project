@@ -28,7 +28,7 @@ def read_timetable_file(station_name):
 
 
 # Handler Functions
-def handle_query(request, query_params, station_name, udp_socket, neighbors, ongoing_queries, client_socket, initial_time):
+def handle_query(request, query_params, station_name, udp_socket, neighbors, client_socket):
     # Re-read the timetable file for the station
     routes = read_timetable_file(station_name)
 
@@ -58,23 +58,14 @@ def handle_query(request, query_params, station_name, udp_socket, neighbors, ong
     if found_routes:
         body = f"<html><body><h1>Available Routes from {station_name} to {to_station}</h1>"
         for route in found_routes:
-            body += f"<p>{route['departure_time']} from {route['departing_from']} to {route['arrival_station']} arriving at {route['arrival_time']}</p>"
+            body += f"<p>catch {route['route_name']} from {route['departing_from']} at {route['departure_time']} to arrive at {route['arrival_station']} at {route['arrival_time']}</p>"
         body += "</body></html>"
         response = create_response(200, body)
         client_socket.sendall(response.encode())
         client_socket.close()
     else:
-        # Initialize journey tracking data structures
-        journey_steps = []  # List to store journey steps
-        queried_stations = set()  # Set to track queried stations
-
-        # Add the current station to queried stations
-        queried_stations.add(station_name)
-
         # No direct route found, send UDP query to neighbors
-        query_message = f"QUERY {station_name} {station_name} {to_station} {current_time.strftime('%H:%M')} PATH {station_name}:{udp_socket.getsockname()[1]}"
-        query_id = f"{station_name}-{to_station}-{current_time.strftime('%H:%M')}"
-        ongoing_queries[query_id] = (client_socket, journey_steps, queried_stations, len(neighbors), initial_time)  # Add initial_time to ongoing queries
+        query_message = f"QUERY {station_name} {to_station} {current_time.strftime('%H:%M')}"
         for neighbor in neighbors:
             udp_socket.sendto(query_message.encode(), neighbor)
             print(f"Sent UDP query to neighbor {neighbor}")

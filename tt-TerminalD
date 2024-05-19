@@ -1,4 +1,10 @@
-# station-name,longitude,latitude
-TerminalD,115.8600,-31.7500
-# departure-time,route-name,departing-from,arrival-time,arrival-station
-09:00,busD_F,stopD,09:30,TerminalF
+# Station: TerminalD, Longitude: 115.8575, Latitude: -31.9505
+# departure_time, route_name, stopA, arrival_time, stopB
+07:00,busD_F,TerminalD,07:30,TerminalF
+09:00,busD_F,TerminalD,09:30,TerminalF
+11:00,busD_F,TerminalD,11:30,TerminalF
+13:00,busD_F,TerminalD,13:30,TerminalF
+15:00,busD_F,TerminalD,15:30,TerminalF
+17:00,busD_F,TerminalD,17:30,TerminalF
+19:00,busD_F,TerminalD,19:30,TerminalF
+21:00,busD_F,TerminalD,21:30,TerminalF
