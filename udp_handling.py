@@ -123,4 +123,3 @@ def handle_udp_message(message, routes, station_name, udp_socket, neighbors, sen
         except Exception as e:
             print(f"Error processing response: {e}")
 
-

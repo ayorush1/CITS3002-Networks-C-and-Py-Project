@@ -58,6 +58,7 @@ def main():
     udp_socket.bind(('127.0.0.1', my_udp_port))
 
     sockets_list = [tcp_socket, udp_socket]
+    ongoing_queries = {}
     print(f"HTTP Server Running on port {tcp_port}")
     print(f"Sockets list: {sockets_list}")
 
@@ -84,7 +85,7 @@ def main():
                     print(f"Accepted new connection from {client_address}")
                 elif notified_socket == udp_socket:
                     print("UDP data detected...")
-                    data, address = udp_socket.recvfrom(1024)  # 1024 is the buffer size of what it's receiving
+                    data, address = udp_socket.recvfrom(1024) # 1024 is the buffer size of what it's receiving
                     print(f"Received UDP message from {address}: {data.decode()}")
                     # Re-read the timetable file for the station
                     routes = read_timetable_file(station_name)
@@ -109,8 +110,7 @@ def main():
 
                         if 'to' in query_params:
                             routes = read_timetable_file(station_name)  # Re-read the timetable file for the station
-                            current_time = datetime.datetime.now().time()  # Use current system time as initial_time
-                            handle_query(body, query_params, station_name, udp_socket, neighbors, notified_socket, current_time)
+                            handle_query(body, query_params, station_name, udp_socket, neighbors, notified_socket)
                         else:
                             response = dispatch_request(method, path, body)
                             notified_socket.sendall(response.encode())
