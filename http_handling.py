@@ -1,5 +1,10 @@
 import datetime
 from helpers import create_response, parse_time_param, parse_path, find_routes, parse_request
+import socket
+from udp_handling import handle_udp_message
+import time
+import select
+
 
 def read_timetable_file(station_name):
     file_path = f"tt-{station_name}"
@@ -28,6 +33,10 @@ def read_timetable_file(station_name):
 
 
 # Handler Functions
+import select
+
+import urllib.parse
+
 def handle_query(request, query_params, station_name, udp_socket, neighbors, client_socket):
     # Re-read the timetable file for the station
     routes = read_timetable_file(station_name)
@@ -40,11 +49,12 @@ def handle_query(request, query_params, station_name, udp_socket, neighbors, cli
         return
 
     # Get current time from query parameters or use the system's current time
-    time_param = query_params.get('time')
-    if time_param:
-        current_time = parse_time_param(time_param)
+    leave_param = query_params.get('leave')
+    if leave_param:
+        leave_param = urllib.parse.unquote(leave_param)  # Decode %3A to :
+        current_time = parse_time_param(leave_param)
         if current_time is None:
-            response = create_response(400, "<html><body><h1>Bad Request</h1><p>Invalid 'time' parameter.</p></body></html>")
+            response = create_response(400, "<html><body><h1>Bad Request</h1><p>Invalid 'leave' parameter.</p></body></html>")
             client_socket.sendall(response.encode())
             client_socket.close()
             return
@@ -58,7 +68,7 @@ def handle_query(request, query_params, station_name, udp_socket, neighbors, cli
     if found_routes:
         body = f"<html><body><h1>Available Routes from {station_name} to {to_station}</h1>"
         for route in found_routes:
-            body += f"<p>catch {route['route_name']} from {route['departing_from']} at {route['departure_time']} to arrive at {route['arrival_station']} at {route['arrival_time']}</p>"
+            body += f"<p>{route['departure_time']} from {route['departing_from']} to {route['arrival_station']} arriving at {route['arrival_time']}</p>"
         body += "</body></html>"
         response = create_response(200, body)
         client_socket.sendall(response.encode())
@@ -69,6 +79,26 @@ def handle_query(request, query_params, station_name, udp_socket, neighbors, cli
         for neighbor in neighbors:
             udp_socket.sendto(query_message.encode(), neighbor)
             print(f"Sent UDP query to neighbor {neighbor}")
+
+        # Use select to wait for a response for up to 15 seconds
+        ready = select.select([udp_socket], [], [], 15)
+        if ready[0]:
+            data, addr = udp_socket.recvfrom(1024)
+            print(f"Received response from {addr}: {data.decode()}")
+            final_response = handle_udp_message(data.decode(), routes, station_name, udp_socket, neighbors, sender_address=addr)
+            if final_response:
+                body = f"<html><body><h1>Journey from {station_name} to {to_station}</h1>"
+                body += f"<p>{final_response}</p>"
+                body += "</body></html>"
+                response = create_response(200, body)
+                client_socket.sendall(response.encode())
+                client_socket.close()
+        else:
+            print("No response received within the timeout period.")
+            body = f"<html><body><h1>No available routes found from {station_name} to {to_station}</h1></body></html>"
+            response = create_response(404, body)
+            client_socket.sendall(response.encode())
+            client_socket.close()
 
 
 

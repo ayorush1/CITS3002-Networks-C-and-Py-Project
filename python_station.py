@@ -51,14 +51,13 @@ def main():
 
     tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tcp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    tcp_socket.bind(('127.0.0.1', tcp_port))
+    tcp_socket.bind(('0.0.0.0', tcp_port))
     tcp_socket.listen(5)
 
     udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    udp_socket.bind(('127.0.0.1', my_udp_port))
+    udp_socket.bind(('0.0.0.0', my_udp_port))
 
     sockets_list = [tcp_socket, udp_socket]
-    ongoing_queries = {}
     print(f"HTTP Server Running on port {tcp_port}")
     print(f"Sockets list: {sockets_list}")
 
@@ -85,7 +84,7 @@ def main():
                     print(f"Accepted new connection from {client_address}")
                 elif notified_socket == udp_socket:
                     print("UDP data detected...")
-                    data, address = udp_socket.recvfrom(1024) # 1024 is the buffer size of what it's receiving
+                    data, address = udp_socket.recvfrom(1024)  # 1024 is the buffer size of what it's receiving
                     print(f"Received UDP message from {address}: {data.decode()}")
                     # Re-read the timetable file for the station
                     routes = read_timetable_file(station_name)

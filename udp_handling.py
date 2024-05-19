@@ -1,4 +1,7 @@
 from helpers import create_response, parse_time_param, find_routes
+import select
+
+
 
 def read_timetable_file(station_name):
     file_path = f"tt-{station_name}"
@@ -25,6 +28,12 @@ def read_timetable_file(station_name):
         print(f"Failed to read timetable file: {e}")
     return routes
 
+import select
+import socket
+import datetime
+import select
+import socket
+import datetime
 def handle_udp_message(message, routes, station_name, udp_socket, neighbors, sender_address=None):
     routes = read_timetable_file(station_name)  # Re-read timetable file
 
@@ -35,21 +44,17 @@ def handle_udp_message(message, routes, station_name, udp_socket, neighbors, sen
         return
 
     if parts[0] == "QUERY":
-        if len(parts) == 4:
-            _, current_source, destination_station, query_time = parts
-            query_path = []
-        else:
-            _, current_source, destination_station, query_time, *query_path = parts
+        _, original_source, destination_station, query_time = parts
 
         current_time = parse_time_param(query_time)
         if current_time is None:
             print(f"Invalid time format in UDP message: {query_time}")
             return
 
-        # Check for direct route
         found_routes = find_routes(station_name, destination_station, routes, current_time)
+
         if found_routes:
-            response_message = f"catch {found_routes[0]['route_name']} from {found_routes[0]['departing_from']} at {found_routes[0]['departure_time']} to arrive at {found_routes[0]['arrival_station']} at {found_routes[0]['arrival_time']} by {station_name}"
+            response_message = f"catch {found_routes[0]['route_name']} from {station_name} at {found_routes[0]['departure_time']} to arrive at {found_routes[0]['arrival_station']} at {found_routes[0]['arrival_time']} by {station_name}"
             print(f"Found routes: {found_routes}")
             print(f"Response message: {response_message}")
 
@@ -62,64 +67,59 @@ def handle_udp_message(message, routes, station_name, udp_socket, neighbors, sen
         else:
             # No direct route found, send UDP query to neighbors
             print(f"No route found from {station_name} to {destination_station} for time {query_time}")
-            new_query_path = query_path + [station_name]
-            new_query_message = f"QUERY {station_name} {destination_station} {query_time} {' '.join(new_query_path)}"
-            print(f"Sending new query: {new_query_message}")
+            new_query_message = f"QUERY {station_name} {destination_station} {query_time}"
             for neighbor in neighbors:
                 neighbor_address = (neighbor[0], int(neighbor[1]))
                 if not sender_address or neighbor_address != sender_address:
                     udp_socket.sendto(new_query_message.encode(), neighbor_address)
                     print(f"Sent UDP query to neighbor {neighbor_address}")
 
+            # Use select to wait for a response for up to 15 seconds
+            ready = select.select([udp_socket], [], [], 15)
+            if ready[0]:
+                data, addr = udp_socket.recvfrom(1024)
+                print(f"Received response from {addr}: {data.decode()}")
+                new_message = handle_udp_message(data.decode(), routes, station_name, udp_socket, neighbors, sender_address=addr)
+                if new_message:
+                    udp_socket.sendto(new_message.encode(), sender_address)
+            else:
+                print("No response received within the timeout period.")
+                if sender_address:
+                    response_message = f"No available routes found from {station_name} to {destination_station}"
+                    udp_socket.sendto(response_message.encode(), sender_address)
+
     elif parts[0] == "catch":
-        try:
-            print(f"Received response: {message}")
+        # Extract each "catch" part
+        catch_parts = message.split(" catch ")
+        catch_parts = [f"catch {part}" if not part.startswith("catch") else part for part in catch_parts]
 
-            # Extract previous station's name from the response message
-            response_parts = message.split(" by ")
-            if len(response_parts) > 1:
-                previous_station_name = response_parts[-1].strip()
-                print(f"Previous station: {previous_station_name}")
-            else:
-                print("Invalid response format")
-                return
+        print(f"Catch parts: {catch_parts}")
 
-            # Extract relevant information from the message
-            catch_parts = message.split()
-            print(f"Catch parts: {catch_parts}")
+        if not catch_parts:
+            print("No valid catch parts found.")
+            return
 
-            # Correctly identify the arrival station and arrival time
-            source_station = catch_parts[3]
-            departure_time = catch_parts[5]
-            route_name = catch_parts[1]
-            arrival_station = catch_parts[9]
-            arrival_time = catch_parts[11]
+        # Process the last "catch" part to find the previous station
+        last_catch_part = catch_parts[-1]
+        last_catch_parts = last_catch_part.split()
+        
+        if len(last_catch_parts) < 9:
+            print(f"Invalid last catch format: {last_catch_parts}")
+            return
 
-            print(f"Source station: {source_station}, Departure time: {departure_time}, Route name: {route_name}, Arrival station: {arrival_station}, Arrival time: {arrival_time}")
+        previous_station_name = last_catch_parts[-1]
+        print(f"Previous station name: {previous_station_name}")
 
-            # Parse the departure time
-            parsed_departure_time = parse_time_param(departure_time)
-            print(f"Parsed departure time: {parsed_departure_time}")
+        # Finding route back to the previous station
+        found_routes = find_routes(station_name, previous_station_name, routes, parse_time_param(last_catch_parts[5]))
+        if found_routes:
+            new_route = f"catch {found_routes[0]['route_name']} from {station_name} at {found_routes[0]['departure_time']} to arrive at {found_routes[0]['arrival_station']} at {found_routes[0]['arrival_time']}"
+            response_message = message.replace(f"by {station_name}", "")
+            response_message = f"{new_route} {response_message} by {station_name}"
+            print(f"Revised response: {response_message}")
 
-            # Find route from the current station to the previous station
-            found_routes = find_routes(station_name, source_station, routes, parsed_departure_time)
-            print(f"Found routes: {found_routes}")
-            
-            if found_routes:
-                route_to_previous = found_routes[0]
-                catch_message = f"catch {route_to_previous['route_name']} from {station_name} at {route_to_previous['departure_time']} to arrive at {route_to_previous['arrival_station']} at {route_to_previous['arrival_time']}"
-                response_message = message.replace(f"by {previous_station_name}", catch_message)
-                response_message += f" by {station_name}"
-                print(f"Updated response message: {response_message}")
+            return response_message
+        else:
+            print(f"No route found from {station_name} to {previous_station_name}")
 
-                # Send the updated response back to the previous station
-                previous_station_address = next((neighbor for neighbor in neighbors if neighbor[0] == previous_station_name), None)
-                if previous_station_address:
-                    previous_station_address = ('127.0.0.1', int(previous_station_address[1]))
-                    print(f"Forwarding response to {previous_station_address}")
-                    udp_socket.sendto(response_message.encode(), previous_station_address)
-            else:
-                print(f"No route found from {station_name} to {source_station}")
-        except Exception as e:
-            print(f"Error processing response: {e}")
 
