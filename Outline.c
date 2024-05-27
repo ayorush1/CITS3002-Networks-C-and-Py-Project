@@ -54,6 +54,10 @@ B(c) -> C(py) -> A(c) -> D(py)
     -> change so that intermediate station finds journey with arrival time less than depart time, instead of depart time > original query departure time. 
    * -> also changed find_routes1 from 'for route in routes' to 'for route in routes[::-1]' in order to search from last route first. 
 
+   * http_handling line91: added final_response = final_response.replace('\n', '<br>') 
+   * station-server.c line831: changed departure_time2 to 'int departure_time2 = ((((departure_hour * 60 + departure_minute + 90) / 60) % 24) * 100) + ((departure_minute + 90) % 60);'
+   * station-server.c line828: added 'continue;' after "printf(stdout, "station%s: could not successfuly scan QUERY. ignoring request.\n", argv[3]); ". 
+   * station-server.c line831: some changes accounting for over 24h
 
 
    * need to change: C code intermediate error ignoring request rather than closing down. 

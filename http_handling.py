@@ -88,6 +88,7 @@ def handle_query(request, query_params, station_name, udp_socket, neighbors, cli
             print(f"Received response from {addr}: {data.decode()}")
             final_response = handle_udp_message(data.decode(), routes, station_name, udp_socket, neighbors, sender_address=addr)
             if final_response:
+                final_response = final_response.replace('\n', '<br>')
                 body = f"<html><body><h1>Journey from {station_name} to {to_station}</h1>"
                 body += f"<p>{final_response}</p>"
                 body += "</body></html>"

@@ -825,9 +825,20 @@ int main(int argc, char* argv[]) {
 
                 if( sscanf(incomingmessage, "QUERY %s %s %d:%d", source_station, destination, &departure_hour, &departure_minute) != 4){ 
                     fprintf(stdout, "station%s: could not successfuly scan QUERY. ignoring request.\n", argv[3]); 
+                    continue; 
                 }
                 usleep(1000);                                                           // WAIT FOR SENDER TO SEND ALL DATAGRAM BEFORE RESPONDING      
-                int departure_time2 = (departure_hour * 100) + departure_minute + 130; 
+                
+                if (departure_hour >= 23){ 
+                    continue; 
+                }
+                int departure_time2; 
+                if (departure_hour >= 22){ 
+                    departure_time2 = (departure_hour * 100) + departure_minute + 130;
+                }
+                else{ 
+                    departure_time2 = ((((departure_hour * 60 + departure_minute + 90) / 60) % 24) * 100) + ((departure_minute + 90) % 60);
+                }
                 int target_route = -1; 
 
 
